@@ -426,15 +426,38 @@ async function removeSkill(id, name) {
   toast('Compétence supprimée');
 }
 
-// CC management
+// CC management — saved contacts in localStorage
 let ccList = ['amadou@les-pilotes.fr'];
 
+function getSavedCcs() {
+  try { return JSON.parse(localStorage.getItem('cc_contacts') || '[]'); } catch { return []; }
+}
+
+function saveCc(email) {
+  const saved = getSavedCcs();
+  if (!saved.includes(email) && email !== 'amadou@les-pilotes.fr') {
+    saved.push(email);
+    localStorage.setItem('cc_contacts', JSON.stringify(saved));
+  }
+}
+
 function renderCcList() {
+  const saved = getSavedCcs().filter(e => !ccList.includes(e));
   document.getElementById('cc-list').innerHTML = ccList.map((email, i) => `
-    <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 12px;background:var(--bg);border:1px solid var(--border);border-radius:20px;font-size:12px">
+    <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 12px;background:var(--accent-light);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--accent)">
       ${email}
-      ${email !== 'amadou@les-pilotes.fr' ? `<button onclick="removeCc(${i})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:14px;padding:0;line-height:1">×</button>` : ''}
-    </span>`).join('');
+      ${email !== 'amadou@les-pilotes.fr' ? `<button onclick="removeCc(${i})" style="background:none;border:none;cursor:pointer;color:var(--accent);font-size:14px;padding:0;line-height:1">×</button>` : ''}
+    </span>`).join('')
+  + (saved.length ? '<div style="width:100%;font-size:11px;color:var(--text-faint);margin-top:4px">Mémorisés :</div>'
+    + saved.map(email => `
+    <span onclick="addSavedCc('${email}')" style="display:inline-flex;align-items:center;gap:4px;padding:3px 10px;background:var(--bg);border:1px solid var(--border);border-radius:20px;font-size:12px;color:var(--text-muted);cursor:pointer" title="Ajouter">
+      + ${email}
+    </span>`).join('') : '');
+}
+
+function addSavedCc(email) {
+  if (!ccList.includes(email)) ccList.push(email);
+  renderCcList();
 }
 
 function addCc() {
@@ -442,6 +465,7 @@ function addCc() {
   const email = input.value.trim();
   if (!email || !email.includes('@')) return;
   if (!ccList.includes(email)) ccList.push(email);
+  saveCc(email);
   input.value = '';
   renderCcList();
 }
