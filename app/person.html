@@ -56,6 +56,16 @@
       <button class="modal-close" onclick="closeModal('email-modal')">×</button>
     </div>
     <p style="font-size:14px;color:var(--text-muted);margin-bottom:16px" id="email-modal-body"></p>
+
+    <div class="form-group">
+      <label class="form-label">Cc</label>
+      <div id="cc-list" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:8px">
+        <input type="email" class="form-input" id="cc-input" placeholder="Ajouter une adresse email..." style="flex:1">
+        <button class="btn btn-secondary btn-sm" onclick="addCc()">+</button>
+      </div>
+    </div>
+
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal('email-modal')">Annuler</button>
       <button class="btn btn-primary" id="email-confirm-btn">Envoyer</button>
@@ -416,11 +426,38 @@ async function removeSkill(id, name) {
   toast('Compétence supprimée');
 }
 
+// CC management
+let ccList = ['amadou@les-pilotes.fr'];
+
+function renderCcList() {
+  document.getElementById('cc-list').innerHTML = ccList.map((email, i) => `
+    <span style="display:inline-flex;align-items:center;gap:5px;padding:3px 10px 3px 12px;background:var(--bg);border:1px solid var(--border);border-radius:20px;font-size:12px">
+      ${email}
+      ${email !== 'amadou@les-pilotes.fr' ? `<button onclick="removeCc(${i})" style="background:none;border:none;cursor:pointer;color:var(--text-faint);font-size:14px;padding:0;line-height:1">×</button>` : ''}
+    </span>`).join('');
+}
+
+function addCc() {
+  const input = document.getElementById('cc-input');
+  const email = input.value.trim();
+  if (!email || !email.includes('@')) return;
+  if (!ccList.includes(email)) ccList.push(email);
+  input.value = '';
+  renderCcList();
+}
+
+function removeCc(i) {
+  ccList.splice(i, 1);
+  renderCcList();
+}
+
 // Email modal
 function openEmailModal(evalId) {
   const ev = allEvals.find(e => e.id === evalId);
   document.getElementById('email-modal-body').textContent =
-    `Envoyer le bilan du ${formatDate(ev?.created_at)} à ${currentPerson?.email || currentPerson?.name} ?`;
+    `Envoyer le bilan du ${formatDate(ev?.created_at)} à ${currentPerson?.email || currentPerson?.name}`;
+  ccList = ['amadou@les-pilotes.fr'];
+  renderCcList();
   document.getElementById('email-confirm-btn').onclick = () => sendEvalEmail(evalId);
   openModal('email-modal');
 }
@@ -430,11 +467,17 @@ async function sendEvalEmail(evalId) {
   btn.disabled = true;
   btn.textContent = 'Envoi...';
 
+  // Capture radar chart as base64 image
+  let radarImage = null;
+  if (radarChart) {
+    try { radarImage = radarChart.toBase64Image('image/png', 1); } catch(e) {}
+  }
+
   try {
     const resp = await fetch('/skill-tracker/send-bilan', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ evaluation_id: evalId, cc: ['amadou@les-pilotes.fr'] })
+      body: JSON.stringify({ evaluation_id: evalId, cc: ccList, radar_image: radarImage })
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || 'Erreur serveur');
@@ -447,6 +490,10 @@ async function sendEvalEmail(evalId) {
     btn.textContent = 'Envoyer';
   }
 }
+
+document.getElementById('cc-input')?.addEventListener('keypress', e => {
+  if (e.key === 'Enter') addCc();
+});
 
 function openModal(id) { document.getElementById(id).classList.add('show'); }
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }

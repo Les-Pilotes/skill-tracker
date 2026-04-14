@@ -39,7 +39,7 @@ def get_gmail_service():
     return build('gmail', 'v1', credentials=creds)
 
 
-def send_bilan(evaluation_id: str, cc: list[str] = None) -> dict:
+def send_bilan(evaluation_id: str, cc: list[str] = None, radar_image: str = None) -> dict:
     conn = psycopg2.connect(**SUPABASE_DB)
     cur = conn.cursor()
 
@@ -107,6 +107,7 @@ def send_bilan(evaluation_id: str, cc: list[str] = None) -> dict:
       <tbody>{scores_rows}</tbody>
     </table>
     {f'<div style="margin-top:20px;padding:16px;background:#F7F6F3;border-radius:6px"><div style="font-size:12px;color:#5F5E5A;margin-bottom:6px;font-weight:600">COMMENTAIRE GÉNÉRAL</div><div style="font-size:14px;color:#1a1a1a">{general_comment}</div></div>' if general_comment else ''}
+    {f'<div style="margin-top:24px"><div style="font-size:12px;font-weight:600;color:#5F5E5A;text-transform:uppercase;margin-bottom:12px">Radar des compétences</div><img src="{radar_image}" style="max-width:100%;border-radius:6px" alt="Radar"></div>' if radar_image else ''}
   </div>
   <div style="padding:16px 24px;border-top:1px solid #E8E7E3;font-size:12px;color:#B4B2A9;text-align:center">Pilotes Academy — Skill Tracker · Les Pilotes</div>
 </div>
