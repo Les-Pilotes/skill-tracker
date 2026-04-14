@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Tableau de bord — Pilotes Academy</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-inner">
+    <div class="navbar-brand">
+      <span class="dot"></span>
+      Pilotes Academy
+    </div>
+    <div class="navbar-nav">
+      <a href="dashboard.html" class="active">Tableau de bord</a>
+      <a href="admin.html">Membres</a>
+    </div>
+    <div class="navbar-right">
+      <div class="user-chip" id="nav-user"></div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Déconnexion</button>
+    </div>
+  </div>
+</nav>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Tableau de bord</div>
+      <div class="page-subtitle">Suivi des compétences — Vue globale</div>
+    </div>
+    <a href="admin.html" class="btn btn-primary">+ Ajouter un membre</a>
+  </div>
+
+  <div id="people-grid" class="people-grid">
+    <div class="loading"><div class="spinner"></div> Chargement...</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+(async () => {
+  const auth = await requireAuth('manager');
+  if (!auth) return;
+  renderNavUser(auth.user, auth.profile);
+  await loadDashboard();
+})();
+
+async function loadDashboard() {
+  const grid = document.getElementById('people-grid');
+
+  // Load all people
+  const { data: people, error } = await db
+    .from('people')
+    .select('*')
+    .order('name');
+
+  if (error || !people) {
+    grid.innerHTML = '<div class="empty-state"><div class="empty-state-title">Erreur de chargement</div></div>';
+    return;
+  }
+
+  if (people.length === 0) {
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="empty-state-icon">👥</div>
+        <div class="empty-state-title">Aucun membre pour l'instant</div>
+        <div class="empty-state-desc">Ajoutez un premier membre pour commencer le suivi.</div>
+        <a href="admin.html" class="btn btn-primary" style="margin-top:16px">+ Ajouter un membre</a>
+      </div>`;
+    return;
+  }
+
+  // Load latest evaluation averages for each person
+  const personIds = people.map(p => p.id);
+
+  // Fetch all evaluations with scores
+  const { data: evals } = await db
+    .from('evaluations')
+    .select('id, person_id, created_at')
+    .in('person_id', personIds)
+    .order('created_at', { ascending: false });
+
+  // Fetch all scores
+  const evalIds = (evals || []).map(e => e.id);
+  let scoresMap = {};
+  if (evalIds.length > 0) {
+    const { data: scores } = await db
+      .from('evaluation_scores')
+      .select('evaluation_id, score')
+      .in('evaluation_id', evalIds);
+
+    // Group by evaluation_id
+    (scores || []).forEach(s => {
+      if (!scoresMap[s.evaluation_id]) scoresMap[s.evaluation_id] = [];
+      scoresMap[s.evaluation_id].push(s.score);
+    });
+  }
+
+  // For each person, find their latest eval
+  const latestEvalByPerson = {};
+  (evals || []).forEach(e => {
+    if (!latestEvalByPerson[e.person_id]) {
+      latestEvalByPerson[e.person_id] = e;
+    }
+  });
+
+  grid.innerHTML = people.map(person => {
+    const latestEval = latestEvalByPerson[person.id];
+    let avgScore = null;
+    if (latestEval && scoresMap[latestEval.id]) {
+      const scores = scoresMap[latestEval.id];
+      avgScore = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+    }
+
+    const initials = getInitials(person.name);
+    const scoreHtml = avgScore
+      ? `<span class="score-badge">${avgScore} / 5</span>`
+      : `<span class="score-badge no-score">Aucune éval.</span>`;
+
+    const lastEvalDate = latestEval
+      ? `Dernière éval : ${formatDateShort(latestEval.created_at)}`
+      : 'Pas encore évalué';
+
+    return `
+      <div class="person-card" onclick="window.location.href='person.html?id=${person.id}'">
+        <div class="person-card-header">
+          <div class="avatar" style="background:${person.color}">${initials}</div>
+          <div>
+            <div class="person-name">${person.name}</div>
+            <div class="person-role">${person.role}</div>
+          </div>
+          ${scoreHtml}
+        </div>
+        <div class="person-card-footer">
+          <span>${lastEvalDate}</span>
+          <span style="color:var(--accent);font-size:12px">Voir →</span>
+        </div>
+      </div>`;
+  }).join('');
+}
+</script>
+</body>
+</html>

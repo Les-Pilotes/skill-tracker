@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Gestion des membres — Pilotes Academy</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-inner">
+    <div class="navbar-brand"><span class="dot"></span> Pilotes Academy</div>
+    <div class="navbar-nav">
+      <a href="dashboard.html">Tableau de bord</a>
+      <a href="admin.html" class="active">Membres</a>
+    </div>
+    <div class="navbar-right">
+      <div class="user-chip" id="nav-user"></div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Déconnexion</button>
+    </div>
+  </div>
+</nav>
+
+<div class="page-wrap">
+  <div class="page-header">
+    <div>
+      <div class="page-title">Gestion des membres</div>
+      <div class="page-subtitle">Ajouter, modifier ou supprimer des membres</div>
+    </div>
+    <button class="btn btn-primary" onclick="openAddModal()">+ Ajouter un membre</button>
+  </div>
+
+  <div class="card">
+    <div id="people-table-wrap">
+      <div class="loading"><div class="spinner"></div> Chargement...</div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Ajouter / Modifier -->
+<div class="modal-overlay" id="person-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-title">Ajouter un membre</div>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Nom complet *</label>
+      <input class="form-input" type="text" id="f-name" placeholder="Prénom Nom" required>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Rôle / Poste *</label>
+        <input class="form-input" type="text" id="f-role" placeholder="Stagiaire, Alternant...">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Date de début</label>
+        <input class="form-input" type="date" id="f-start">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Email (@les-pilotes.fr)</label>
+      <input class="form-input" type="email" id="f-email" placeholder="prenom@les-pilotes.fr">
+      <div class="form-hint">Utilisé pour envoyer les bilans d'évaluation</div>
+    </div>
+
+    <div class="form-group">
+      <label class="form-label">Couleur</label>
+      <div class="color-swatches" id="color-swatches">
+        ${['#BA7517','#3D6ECC','#2D7A4F','#8B3A8B','#C0392B','#16758A','#E07B39','#5B6BA9','#7B8C3A','#A03060'].map(c =>
+          `<div class="swatch ${c==='#BA7517'?'selected':''}" style="background:${c}" data-color="${c}" onclick="selectColor('${c}')"></div>`
+        ).join('')}
+      </div>
+    </div>
+
+    <div id="account-section">
+      <div class="divider"></div>
+      <div class="form-group">
+        <label class="form-label">Mot de passe (compte stagiaire)</label>
+        <input class="form-input" type="password" id="f-password" placeholder="Min. 6 caractères">
+        <div class="form-hint" id="password-hint">Laissez vide pour ne pas créer de compte de connexion</div>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Annuler</button>
+      <button class="btn btn-primary" id="modal-save-btn" onclick="savePerson()">Ajouter</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Confirmer suppression -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal" style="max-width:380px">
+    <div class="modal-header">
+      <div class="modal-title">Supprimer le membre</div>
+      <button class="modal-close" onclick="document.getElementById('delete-modal').classList.remove('show')">×</button>
+    </div>
+    <p style="font-size:14px;color:var(--text-muted)" id="delete-modal-body"></p>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="document.getElementById('delete-modal').classList.remove('show')">Annuler</button>
+      <button class="btn btn-danger" id="delete-confirm-btn">Supprimer</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+let people = [];
+let editingId = null;
+let selectedColor = '#BA7517';
+
+(async () => {
+  const auth = await requireAuth('manager');
+  if (!auth) return;
+  renderNavUser(auth.user, auth.profile);
+  await loadPeople();
+})();
+
+async function loadPeople() {
+  const { data, error } = await db.from('people').select('*').order('name');
+  people = data || [];
+  renderTable();
+}
+
+function renderTable() {
+  const wrap = document.getElementById('people-table-wrap');
+  if (people.length === 0) {
+    wrap.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-state-icon">👥</div>
+        <div class="empty-state-title">Aucun membre</div>
+        <div class="empty-state-desc">Ajoutez votre premier membre pour commencer.</div>
+      </div>`;
+    return;
+  }
+
+  wrap.innerHTML = `
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Membre</th>
+          <th>Rôle</th>
+          <th>Début</th>
+          <th>Email</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${people.map(p => `
+          <tr>
+            <td>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div class="avatar" style="background:${p.color};width:32px;height:32px;font-size:11px">${getInitials(p.name)}</div>
+                <strong>${p.name}</strong>
+              </div>
+            </td>
+            <td>${p.role}</td>
+            <td>${p.start_date ? formatDateShort(p.start_date) : '—'}</td>
+            <td>${p.email || '—'}</td>
+            <td style="text-align:right">
+              <div style="display:flex;gap:6px;justify-content:flex-end">
+                <a href="person.html?id=${p.id}" class="btn btn-ghost btn-sm">Voir</a>
+                <button class="btn btn-secondary btn-sm" onclick="openEditModal('${p.id}')">Modifier</button>
+                <button class="btn btn-danger btn-sm" onclick="confirmDelete('${p.id}','${p.name}')">Supprimer</button>
+              </div>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`;
+}
+
+function openAddModal() {
+  editingId = null;
+  document.getElementById('modal-title').textContent = 'Ajouter un membre';
+  document.getElementById('modal-save-btn').textContent = 'Ajouter';
+  document.getElementById('account-section').style.display = '';
+  document.getElementById('password-hint').textContent = 'Laissez vide pour ne pas créer de compte de connexion';
+  clearForm();
+  document.getElementById('person-modal').classList.add('show');
+}
+
+function openEditModal(id) {
+  editingId = id;
+  const p = people.find(x => x.id === id);
+  if (!p) return;
+
+  document.getElementById('modal-title').textContent = 'Modifier le membre';
+  document.getElementById('modal-save-btn').textContent = 'Enregistrer';
+  document.getElementById('f-name').value = p.name;
+  document.getElementById('f-role').value = p.role;
+  document.getElementById('f-start').value = p.start_date || '';
+  document.getElementById('f-email').value = p.email || '';
+  document.getElementById('f-password').value = '';
+  document.getElementById('password-hint').textContent = 'Laissez vide pour ne pas changer le mot de passe';
+
+  selectColor(p.color);
+  document.getElementById('person-modal').classList.add('show');
+}
+
+function clearForm() {
+  ['f-name','f-role','f-start','f-email','f-password'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  selectColor('#BA7517');
+}
+
+function selectColor(c) {
+  selectedColor = c;
+  document.querySelectorAll('.swatch').forEach(s => {
+    s.classList.toggle('selected', s.dataset.color === c);
+  });
+}
+
+function closeModal() {
+  document.getElementById('person-modal').classList.remove('show');
+}
+
+async function savePerson() {
+  const name  = document.getElementById('f-name').value.trim();
+  const role  = document.getElementById('f-role').value.trim();
+  const start = document.getElementById('f-start').value || null;
+  const email = document.getElementById('f-email').value.trim() || null;
+  const password = document.getElementById('f-password').value;
+
+  if (!name || !role) { toast('Nom et rôle requis', 'error'); return; }
+
+  const btn = document.getElementById('modal-save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+
+  const personData = {
+    name, role, color: selectedColor,
+    start_date: start, email,
+    initials: getInitials(name)
+  };
+
+  if (editingId) {
+    // Update existing
+    const { error } = await db.from('people').update(personData).eq('id', editingId);
+    if (error) { toast('Erreur : ' + error.message, 'error'); btn.disabled=false; btn.textContent='Enregistrer'; return; }
+    toast('Membre mis à jour ✓', 'success');
+  } else {
+    // Create new person
+    const { data: newPerson, error } = await db.from('people').insert(personData).select().single();
+    if (error) { toast('Erreur : ' + error.message, 'error'); btn.disabled=false; btn.textContent='Ajouter'; return; }
+
+    // Seed default skills
+    const skillRows = DEFAULT_SKILLS.map(n => ({ person_id: newPerson.id, name: n }));
+    await db.from('skills').insert(skillRows);
+
+    // Create auth account if password provided
+    if (password && email) {
+      try {
+        const resp = await db.functions.invoke('create-stagiaire', {
+          body: { email, password, person_id: newPerson.id }
+        });
+        if (resp.error) toast('Membre créé mais compte login non créé : ' + resp.error.message, 'error');
+        else toast('Membre et compte créés ✓', 'success');
+      } catch(e) {
+        toast('Membre créé. Compte login : ' + e.message, 'error');
+      }
+    } else {
+      toast('Membre ajouté ✓', 'success');
+    }
+  }
+
+  closeModal();
+  await loadPeople();
+  btn.disabled = false;
+}
+
+function confirmDelete(id, name) {
+  document.getElementById('delete-modal-body').textContent =
+    `Supprimer "${name}" ? Toutes ses évaluations et compétences seront supprimées définitivement.`;
+  document.getElementById('delete-confirm-btn').onclick = () => deletePerson(id);
+  document.getElementById('delete-modal').classList.add('show');
+}
+
+async function deletePerson(id) {
+  const btn = document.getElementById('delete-confirm-btn');
+  btn.disabled = true;
+  const { error } = await db.from('people').delete().eq('id', id);
+  if (error) { toast('Erreur : ' + error.message, 'error'); btn.disabled=false; return; }
+  document.getElementById('delete-modal').classList.remove('show');
+  toast('Membre supprimé');
+  await loadPeople();
+}
+</script>
+</body>
+</html>

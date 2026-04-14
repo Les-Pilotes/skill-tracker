@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <title>Nouvelle évaluation — Pilotes Academy</title>
+  <link rel="stylesheet" href="css/main.css">
+</head>
+<body>
+
+<nav class="navbar">
+  <div class="navbar-inner">
+    <div class="navbar-brand"><span class="dot"></span> Pilotes Academy</div>
+    <div class="navbar-nav">
+      <a href="dashboard.html">Tableau de bord</a>
+      <a href="admin.html">Membres</a>
+    </div>
+    <div class="navbar-right">
+      <div class="user-chip" id="nav-user"></div>
+      <button class="btn btn-ghost btn-sm" onclick="logout()">Déconnexion</button>
+    </div>
+  </div>
+</nav>
+
+<div class="page-wrap" style="max-width:860px">
+  <div id="main-content">
+    <div class="loading"><div class="spinner"></div> Chargement...</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/auth.js"></script>
+<script>
+const params = new URLSearchParams(location.search);
+const personId = params.get('person');
+let person = null;
+let skills = [];
+const scores = {}; // skill_id → { score, comment }
+
+(async () => {
+  const auth = await requireAuth('manager');
+  if (!auth) return;
+  renderNavUser(auth.user, auth.profile);
+
+  if (!personId) {
+    window.location.href = 'dashboard.html';
+    return;
+  }
+
+  await load();
+})();
+
+async function load() {
+  const { data: p } = await db.from('people').select('*').eq('id', personId).single();
+  if (!p) { window.location.href = 'dashboard.html'; return; }
+  person = p;
+
+  const { data: s } = await db.from('skills').select('*').eq('person_id', personId).order('name');
+  skills = s || [];
+
+  render();
+}
+
+function render() {
+  const initials = getInitials(person.name);
+  const content = document.getElementById('main-content');
+
+  content.innerHTML = `
+    <div style="padding-top:24px">
+      <a class="back-link" href="person.html?id=${personId}">← ${person.name}</a>
+
+      <div class="page-header">
+        <div>
+          <div class="page-title">Nouvelle évaluation</div>
+          <div class="page-subtitle">
+            <span class="avatar" style="background:${person.color};width:20px;height:20px;font-size:9px;display:inline-flex;vertical-align:middle">${initials}</span>
+            ${person.name} · ${new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+          </div>
+        </div>
+        <div style="display:flex;gap:8px">
+          <a href="person.html?id=${personId}" class="btn btn-secondary">Annuler</a>
+          <button class="btn btn-primary" id="save-btn" onclick="saveEvaluation()">Enregistrer l'évaluation</button>
+        </div>
+      </div>
+
+      ${skills.length === 0 ? `
+        <div class="empty-state">
+          <div class="empty-state-title">Aucune compétence définie</div>
+          <div class="empty-state-desc">Ajoutez d'abord des compétences depuis le profil de ${person.name}.</div>
+          <a href="person.html?id=${personId}" class="btn btn-primary" style="margin-top:16px">Gérer les compétences</a>
+        </div>` : `
+      <div class="card eval-form">
+        <div class="section-title" style="margin-bottom:16px">Compétences</div>
+        <div id="skills-form">
+          ${skills.map(s => `
+            <div class="skill-row" id="row-${s.id}">
+              <div class="skill-name">${s.name}</div>
+              <div class="score-input-group">
+                ${[1,2,3,4,5].map(n => `
+                  <button class="score-btn" data-skill="${s.id}" data-score="${n}" onclick="setScore('${s.id}',${n})">${n}</button>
+                `).join('')}
+              </div>
+              <div class="skill-comment">
+                <input type="text" placeholder="Commentaire (optionnel)" maxlength="200"
+                  oninput="setComment('${s.id}', this.value)">
+              </div>
+            </div>`).join('')}
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="form-group">
+          <label class="form-label">Commentaire général (optionnel)</label>
+          <textarea class="form-input" id="general-comment" placeholder="Bilan global de cette évaluation..." rows="3"></textarea>
+        </div>
+      </div>`}
+    </div>`;
+}
+
+function setScore(skillId, score) {
+  if (!scores[skillId]) scores[skillId] = { score: null, comment: '' };
+  scores[skillId].score = score;
+
+  // Update UI
+  document.querySelectorAll(`[data-skill="${skillId}"]`).forEach(btn => {
+    btn.classList.toggle('selected', parseInt(btn.dataset.score) === score);
+  });
+}
+
+function setComment(skillId, comment) {
+  if (!scores[skillId]) scores[skillId] = { score: null, comment: '' };
+  scores[skillId].comment = comment;
+}
+
+async function saveEvaluation() {
+  // Validate: all skills must have a score
+  const missing = skills.filter(s => !scores[s.id]?.score);
+  if (missing.length > 0) {
+    toast(`Notez toutes les compétences (${missing.length} manquante${missing.length>1?'s':''})`, 'error');
+    // Highlight missing rows
+    missing.forEach(s => {
+      const row = document.getElementById(`row-${s.id}`);
+      if (row) { row.style.background = '#fff8f7'; setTimeout(() => row.style.background = '', 2000); }
+    });
+    return;
+  }
+
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+
+  const generalComment = document.getElementById('general-comment')?.value.trim() || null;
+  const { data: { user } } = await db.auth.getUser();
+
+  // Create evaluation
+  const { data: ev, error: evErr } = await db.from('evaluations').insert({
+    person_id: personId,
+    created_by: user.id,
+    general_comment: generalComment
+  }).select().single();
+
+  if (evErr) {
+    toast('Erreur lors de la création de l\'évaluation', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Enregistrer l\'évaluation';
+    return;
+  }
+
+  // Insert scores
+  const scoreRows = skills.map(s => ({
+    evaluation_id: ev.id,
+    skill_id: s.id,
+    score: scores[s.id].score,
+    comment: scores[s.id].comment || null
+  }));
+
+  const { error: scErr } = await db.from('evaluation_scores').insert(scoreRows);
+  if (scErr) {
+    toast('Erreur lors de l\'enregistrement des notes', 'error');
+    btn.disabled = false;
+    btn.textContent = 'Enregistrer l\'évaluation';
+    return;
+  }
+
+  toast('Évaluation enregistrée ✓', 'success');
+  setTimeout(() => { window.location.href = `person.html?id=${personId}`; }, 800);
+}
+</script>
+</body>
+</html>
