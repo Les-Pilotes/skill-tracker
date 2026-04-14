@@ -431,10 +431,13 @@ async function sendEvalEmail(evalId) {
   btn.textContent = 'Envoi...';
 
   try {
-    const { data, error } = await db.functions.invoke('send-evaluation', {
-      body: { evaluation_id: evalId }
+    const resp = await fetch('/skill-tracker/send-bilan', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ evaluation_id: evalId, cc: ['amadou@les-pilotes.fr'] })
     });
-    if (error) throw error;
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Erreur serveur');
     toast('Bilan envoyé par email ✓', 'success');
     closeModal('email-modal');
   } catch (e) {
