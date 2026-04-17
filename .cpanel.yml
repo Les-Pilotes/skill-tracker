@@ -1,0 +1,6 @@
+---
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/unwm2932/academy.les-pilotes.fr/
+    - /bin/mkdir -p $DEPLOYPATH
+    - /bin/cp -Ra %{build.dir}/app/. $DEPLOYPATH
