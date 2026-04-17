@@ -42,6 +42,17 @@ serve(async (req) => {
 
     if (evErr || !ev) throw new Error('Évaluation introuvable')
 
+    // Guard: prevent double-send
+    if (ev.email_sent_at) {
+      return new Response(JSON.stringify({
+        error: 'Email déjà envoyé',
+        email_sent_at: ev.email_sent_at
+      }), {
+        status: 409,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
     const person = ev.people
     if (!person?.email) throw new Error('Aucun email défini pour ce membre')
 
@@ -135,7 +146,17 @@ serve(async (req) => {
       throw new Error(`Resend error: ${err}`)
     }
 
-    return new Response(JSON.stringify({ success: true }), {
+    // Mark email as sent to prevent double-sends
+    const { error: updateErr } = await supabase
+      .from('evaluations')
+      .update({ email_sent_at: new Date().toISOString() })
+      .eq('id', evaluation_id)
+
+    if (updateErr) {
+      console.error('Warning: email sent but failed to update email_sent_at:', updateErr.message)
+    }
+
+    return new Response(JSON.stringify({ success: true, email_sent_at: new Date().toISOString() }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })
 
