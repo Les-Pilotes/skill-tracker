@@ -2,12 +2,14 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Nouvelle évaluation — Pilotes Academy</title>
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
+<a class="skip-link" href="#main">Aller au contenu</a>
 
-<nav class="navbar">
+<nav class="navbar" aria-label="Navigation principale">
   <div class="navbar-inner">
     <div class="navbar-brand"><img src="logo.png" alt="Les Pilotes" style="width:28px;height:28px;border-radius:50%;object-fit:cover;"> Pilotes Academy</div>
     <div class="navbar-nav">
@@ -21,11 +23,11 @@
   </div>
 </nav>
 
-<div class="page-wrap" style="max-width:860px">
+<main id="main" class="page-wrap" style="max-width:860px">
   <div id="main-content">
     <div class="loading"><div class="spinner"></div> Chargement...</div>
   </div>
-</div>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/config.js"></script>
@@ -35,7 +37,16 @@ const params = new URLSearchParams(location.search);
 const personId = params.get('person');
 let person = null;
 let skills = [];
-const scores = {}; // skill_id → { score, comment }
+const scores = {};
+let isDirty = false;
+let isSaving = false;
+
+window.addEventListener('beforeunload', (e) => {
+  if (isDirty && !isSaving) {
+    e.preventDefault();
+    e.returnValue = '';
+  }
+});
 
 (async () => {
   const auth = await requireAuth('manager');
@@ -93,15 +104,19 @@ function render() {
         <div class="section-title" style="margin-bottom:16px">Compétences</div>
         <div id="skills-form">
           ${skills.map(s => `
-            <div class="skill-row" id="row-${s.id}">
+            <div class="skill-row" id="row-${s.id}" tabindex="0" aria-label="${s.name}">
               <div class="skill-name">${s.name}</div>
-              <div class="score-input-group">
+              <div class="score-input-group" role="group" aria-label="Note pour ${s.name}">
                 ${[1,2,3,4,5].map(n => `
-                  <button class="score-btn" data-skill="${s.id}" data-score="${n}" onclick="setScore('${s.id}',${n})">${n}</button>
+                  <button class="score-btn" data-skill="${s.id}" data-score="${n}"
+                    onclick="setScore('${s.id}',${n})"
+                    aria-label="${n} sur 5"
+                    aria-pressed="false">${n}</button>
                 `).join('')}
               </div>
               <div class="skill-comment">
-                <input type="text" placeholder="Commentaire (optionnel)" maxlength="200"
+                <label for="comment-${s.id}" class="sr-only">Commentaire pour ${s.name}</label>
+                <input type="text" id="comment-${s.id}" placeholder="Commentaire (optionnel)" maxlength="200"
                   oninput="setComment('${s.id}', this.value)">
               </div>
             </div>`).join('')}
@@ -120,31 +135,69 @@ function render() {
 function setScore(skillId, score) {
   if (!scores[skillId]) scores[skillId] = { score: null, comment: '' };
   scores[skillId].score = score;
+  isDirty = true;
 
-  // Update UI
   document.querySelectorAll(`[data-skill="${skillId}"]`).forEach(btn => {
-    btn.classList.toggle('selected', parseInt(btn.dataset.score) === score);
+    const selected = parseInt(btn.dataset.score) === score;
+    btn.classList.toggle('selected', selected);
+    btn.setAttribute('aria-pressed', selected);
   });
+
+  // Clear validation error on this row
+  const row = document.getElementById(`row-${skillId}`);
+  if (row) {
+    row.classList.remove('has-error');
+    const errEl = row.querySelector('.field-error');
+    if (errEl) errEl.classList.remove('show');
+  }
 }
 
 function setComment(skillId, comment) {
   if (!scores[skillId]) scores[skillId] = { score: null, comment: '' };
   scores[skillId].comment = comment;
+  isDirty = true;
 }
 
+// Keyboard shortcut: press 1-5 to score the focused skill row
+document.addEventListener('keydown', (e) => {
+  const n = parseInt(e.key);
+  if (n >= 1 && n <= 5 && !e.ctrlKey && !e.metaKey) {
+    const active = document.activeElement;
+    const row = active?.closest('.skill-row');
+    if (row) {
+      const skillId = row.id.replace('row-', '');
+      if (skillId && skills.find(s => s.id === skillId)) {
+        setScore(skillId, n);
+        e.preventDefault();
+      }
+    }
+  }
+});
+
 async function saveEvaluation() {
-  // Validate: all skills must have a score
   const missing = skills.filter(s => !scores[s.id]?.score);
   if (missing.length > 0) {
     toast(`Notez toutes les compétences (${missing.length} manquante${missing.length>1?'s':''})`, 'error');
-    // Highlight missing rows
     missing.forEach(s => {
       const row = document.getElementById(`row-${s.id}`);
-      if (row) { row.style.background = '#fff8f7'; setTimeout(() => row.style.background = '', 2000); }
+      if (row) {
+        row.classList.add('has-error');
+        let errEl = row.querySelector('.field-error');
+        if (!errEl) {
+          errEl = document.createElement('p');
+          errEl.className = 'field-error';
+          errEl.setAttribute('role', 'alert');
+          errEl.textContent = 'Note requise';
+          row.appendChild(errEl);
+        }
+        errEl.classList.add('show');
+      }
     });
+    missing[0] && document.getElementById(`row-${missing[0].id}`)?.querySelector('.score-btn')?.focus();
     return;
   }
 
+  isSaving = true;
   const btn = document.getElementById('save-btn');
   btn.disabled = true;
   btn.textContent = 'Enregistrement...';
@@ -163,6 +216,7 @@ async function saveEvaluation() {
     toast('Erreur lors de la création de l\'évaluation', 'error');
     btn.disabled = false;
     btn.textContent = 'Enregistrer l\'évaluation';
+    isSaving = false;
     return;
   }
 
@@ -179,6 +233,7 @@ async function saveEvaluation() {
     toast('Erreur lors de l\'enregistrement des notes', 'error');
     btn.disabled = false;
     btn.textContent = 'Enregistrer l\'évaluation';
+    isSaving = false;
     return;
   }
 

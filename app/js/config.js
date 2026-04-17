@@ -51,6 +51,35 @@ function toast(msg, type = '') {
   setTimeout(() => t.remove(), 3500);
 }
 
+// Focus trap for accessible modals
+function trapFocus(overlayEl) {
+  const focusable = Array.from(overlayEl.querySelectorAll(
+    'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+  ));
+  if (!focusable.length) return;
+  overlayEl._prevFocus = document.activeElement;
+  overlayEl._trapHandler = (e) => {
+    if (e.key !== 'Tab') return;
+    const first = focusable[0];
+    const last  = focusable[focusable.length - 1];
+    if (e.shiftKey) {
+      if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+    } else {
+      if (document.activeElement === last)  { e.preventDefault(); first.focus(); }
+    }
+  };
+  overlayEl.addEventListener('keydown', overlayEl._trapHandler);
+  setTimeout(() => focusable[0].focus(), 50);
+}
+
+function releaseFocus(overlayEl) {
+  if (overlayEl._trapHandler) {
+    overlayEl.removeEventListener('keydown', overlayEl._trapHandler);
+    overlayEl._trapHandler = null;
+  }
+  if (overlayEl._prevFocus) overlayEl._prevFocus.focus();
+}
+
 // Lighten color for background
 function hexToRgba(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16);

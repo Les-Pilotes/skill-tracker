@@ -2,12 +2,14 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Gestion des membres — Pilotes Academy</title>
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
+<a class="skip-link" href="#main">Aller au contenu</a>
 
-<nav class="navbar">
+<nav class="navbar" aria-label="Navigation principale">
   <div class="navbar-inner">
     <div class="navbar-brand"><img src="logo.png" alt="Les Pilotes" style="width:28px;height:28px;border-radius:50%;object-fit:cover;"> Pilotes Academy</div>
     <div class="navbar-nav">
@@ -21,10 +23,10 @@
   </div>
 </nav>
 
-<div class="page-wrap">
+<main id="main" class="page-wrap">
   <div class="page-header">
     <div>
-      <div class="page-title">Gestion des membres</div>
+      <h1 class="page-title">Gestion des membres</h1>
       <div class="page-subtitle">Ajouter, modifier ou supprimer des membres</div>
     </div>
     <button class="btn btn-primary" onclick="openAddModal()">+ Ajouter un membre</button>
@@ -35,43 +37,46 @@
       <div class="loading"><div class="spinner"></div> Chargement...</div>
     </div>
   </div>
-</div>
+</main>
 
 <!-- Modal: Ajouter / Modifier -->
-<div class="modal-overlay" id="person-modal">
+<div class="modal-overlay" id="person-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
   <div class="modal">
     <div class="modal-header">
       <div class="modal-title" id="modal-title">Ajouter un membre</div>
-      <button class="modal-close" onclick="closeModal()">×</button>
+      <button class="modal-close" onclick="closeModal()" aria-label="Fermer">×</button>
     </div>
 
     <div class="form-group">
-      <label class="form-label">Nom complet *</label>
-      <input class="form-input" type="text" id="f-name" placeholder="Prénom Nom" required>
+      <label class="form-label" for="f-name">Nom complet <span aria-hidden="true">*</span></label>
+      <input class="form-input" type="text" id="f-name" placeholder="Prénom Nom" required aria-required="true">
     </div>
 
     <div class="form-row">
       <div class="form-group">
-        <label class="form-label">Rôle / Poste *</label>
-        <input class="form-input" type="text" id="f-role" placeholder="Stagiaire, Alternant...">
+        <label class="form-label" for="f-role">Rôle / Poste <span aria-hidden="true">*</span></label>
+        <input class="form-input" type="text" id="f-role" placeholder="Stagiaire, Alternant..." required aria-required="true">
       </div>
       <div class="form-group">
-        <label class="form-label">Date de début</label>
+        <label class="form-label" for="f-start">Date de début</label>
         <input class="form-input" type="date" id="f-start">
       </div>
     </div>
 
     <div class="form-group">
-      <label class="form-label">Email (@les-pilotes.fr)</label>
-      <input class="form-input" type="email" id="f-email" placeholder="prenom@les-pilotes.fr">
+      <label class="form-label" for="f-email">Email (@les-pilotes.fr)</label>
+      <input class="form-input" type="email" id="f-email" placeholder="prenom@les-pilotes.fr" autocomplete="email">
       <div class="form-hint">Utilisé pour envoyer les bilans d'évaluation</div>
     </div>
 
     <div class="form-group">
-      <label class="form-label">Couleur</label>
-      <div class="color-swatches" id="color-swatches">
+      <label class="form-label" id="color-label">Couleur</label>
+      <div class="color-swatches" id="color-swatches" role="group" aria-labelledby="color-label">
         ${['#BA7517','#3D6ECC','#2D7A4F','#8B3A8B','#C0392B','#16758A','#E07B39','#5B6BA9','#7B8C3A','#A03060'].map(c =>
-          `<div class="swatch ${c==='#BA7517'?'selected':''}" style="background:${c}" data-color="${c}" onclick="selectColor('${c}')"></div>`
+          `<div class="swatch ${c==='#BA7517'?'selected':''}" style="background:${c}" data-color="${c}"
+            onclick="selectColor('${c}')" tabindex="0" role="radio" aria-checked="${c==='#BA7517'}"
+            aria-label="Couleur ${c}"
+            onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();selectColor('${c}')}"></div>`
         ).join('')}
       </div>
     </div>
@@ -79,8 +84,8 @@
     <div id="account-section">
       <div class="divider"></div>
       <div class="form-group">
-        <label class="form-label">Mot de passe (compte stagiaire)</label>
-        <input class="form-input" type="password" id="f-password" placeholder="Min. 6 caractères">
+        <label class="form-label" for="f-password">Mot de passe (compte stagiaire)</label>
+        <input class="form-input" type="password" id="f-password" placeholder="Min. 6 caractères" autocomplete="new-password">
         <div class="form-hint" id="password-hint">Laissez vide pour ne pas créer de compte de connexion</div>
       </div>
     </div>
@@ -93,15 +98,15 @@
 </div>
 
 <!-- Modal: Confirmer suppression -->
-<div class="modal-overlay" id="delete-modal">
+<div class="modal-overlay" id="delete-modal" role="dialog" aria-modal="true" aria-labelledby="delete-modal-title">
   <div class="modal" style="max-width:380px">
     <div class="modal-header">
-      <div class="modal-title">Supprimer le membre</div>
-      <button class="modal-close" onclick="document.getElementById('delete-modal').classList.remove('show')">×</button>
+      <div class="modal-title" id="delete-modal-title">Supprimer le membre</div>
+      <button class="modal-close" onclick="closeDeleteModal()" aria-label="Fermer">×</button>
     </div>
     <p style="font-size:14px;color:var(--text-muted)" id="delete-modal-body"></p>
     <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="document.getElementById('delete-modal').classList.remove('show')">Annuler</button>
+      <button class="btn btn-secondary" onclick="closeDeleteModal()">Annuler</button>
       <button class="btn btn-danger" id="delete-confirm-btn">Supprimer</button>
     </div>
   </div>
@@ -141,7 +146,7 @@ function renderTable() {
   }
 
   wrap.innerHTML = `
-    <table class="data-table">
+    <div class="table-responsive"><table class="data-table">
       <thead>
         <tr>
           <th>Membre</th>
@@ -172,7 +177,7 @@ function renderTable() {
             </td>
           </tr>`).join('')}
       </tbody>
-    </table>`;
+    </table></div>`;
 }
 
 function openAddModal() {
@@ -182,7 +187,9 @@ function openAddModal() {
   document.getElementById('account-section').style.display = '';
   document.getElementById('password-hint').textContent = 'Laissez vide pour ne pas créer de compte de connexion';
   clearForm();
-  document.getElementById('person-modal').classList.add('show');
+  const el = document.getElementById('person-modal');
+  el.classList.add('show');
+  trapFocus(el);
 }
 
 function openEditModal(id) {
@@ -200,7 +207,9 @@ function openEditModal(id) {
   document.getElementById('password-hint').textContent = 'Laissez vide pour ne pas changer le mot de passe';
 
   selectColor(p.color);
-  document.getElementById('person-modal').classList.add('show');
+  const el = document.getElementById('person-modal');
+  el.classList.add('show');
+  trapFocus(el);
 }
 
 function clearForm() {
@@ -214,12 +223,22 @@ function clearForm() {
 function selectColor(c) {
   selectedColor = c;
   document.querySelectorAll('.swatch').forEach(s => {
-    s.classList.toggle('selected', s.dataset.color === c);
+    const sel = s.dataset.color === c;
+    s.classList.toggle('selected', sel);
+    s.setAttribute('aria-checked', sel);
   });
 }
 
 function closeModal() {
-  document.getElementById('person-modal').classList.remove('show');
+  const el = document.getElementById('person-modal');
+  el.classList.remove('show');
+  releaseFocus(el);
+}
+
+function closeDeleteModal() {
+  const el = document.getElementById('delete-modal');
+  el.classList.remove('show');
+  releaseFocus(el);
 }
 
 async function savePerson() {
@@ -280,7 +299,9 @@ function confirmDelete(id, name) {
   document.getElementById('delete-modal-body').textContent =
     `Supprimer "${name}" ? Toutes ses évaluations et compétences seront supprimées définitivement.`;
   document.getElementById('delete-confirm-btn').onclick = () => deletePerson(id);
-  document.getElementById('delete-modal').classList.add('show');
+  const el = document.getElementById('delete-modal');
+  el.classList.add('show');
+  trapFocus(el);
 }
 
 async function deletePerson(id) {
@@ -288,10 +309,18 @@ async function deletePerson(id) {
   btn.disabled = true;
   const { error } = await db.from('people').delete().eq('id', id);
   if (error) { toast('Erreur : ' + error.message, 'error'); btn.disabled=false; return; }
-  document.getElementById('delete-modal').classList.remove('show');
+  closeDeleteModal();
   toast('Membre supprimé');
   await loadPeople();
 }
+
+// Close on Escape
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    if (document.getElementById('person-modal')?.classList.contains('show')) closeModal();
+    if (document.getElementById('delete-modal')?.classList.contains('show')) closeDeleteModal();
+  }
+});
 </script>
 </body>
 </html>

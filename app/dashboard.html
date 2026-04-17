@@ -2,12 +2,14 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Tableau de bord — Pilotes Academy</title>
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
+<a class="skip-link" href="#main">Aller au contenu</a>
 
-<nav class="navbar">
+<nav class="navbar" aria-label="Navigation principale">
   <div class="navbar-inner">
     <div class="navbar-brand">
       <img src="logo.png" alt="Les Pilotes" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">
@@ -24,35 +26,51 @@
   </div>
 </nav>
 
-<div class="page-wrap">
+<main id="main" class="page-wrap">
   <div class="page-header">
     <div>
-      <div class="page-title">Tableau de bord</div>
+      <h1 class="page-title">Tableau de bord</h1>
       <div class="page-subtitle">Suivi des compétences — Vue globale</div>
     </div>
     <a href="admin.html" class="btn btn-primary">+ Ajouter un membre</a>
   </div>
 
-  <div id="people-grid" class="people-grid">
+  <div class="toolbar" style="margin-bottom:8px">
+    <input type="search" id="search-input" class="search-input" placeholder="Rechercher un membre..." aria-label="Rechercher un membre">
+    <select id="sort-select" class="form-input" style="width:auto;font-size:13px;padding:7px 10px" aria-label="Trier par">
+      <option value="name">Trier : Nom</option>
+      <option value="score-desc">Trier : Meilleur score</option>
+      <option value="score-asc">Trier : Score le plus faible</option>
+      <option value="date-desc">Trier : Éval. récente</option>
+    </select>
+  </div>
+
+  <div id="people-grid" class="people-grid" aria-live="polite">
     <div class="loading"><div class="spinner"></div> Chargement...</div>
   </div>
-</div>
+</main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
 <script>
+let allPeople = [];
+let latestEvalByPerson = {};
+let scoresMap = {};
+
 (async () => {
   const auth = await requireAuth('manager');
   if (!auth) return;
   renderNavUser(auth.user, auth.profile);
   await loadDashboard();
+
+  document.getElementById('search-input').addEventListener('input', renderGrid);
+  document.getElementById('sort-select').addEventListener('change', renderGrid);
 })();
 
 async function loadDashboard() {
   const grid = document.getElementById('people-grid');
 
-  // Load all people
   const { data: people, error } = await db
     .from('people')
     .select('*')
@@ -74,61 +92,91 @@ async function loadDashboard() {
     return;
   }
 
-  // Load latest evaluation averages for each person
+  allPeople = people;
   const personIds = people.map(p => p.id);
 
-  // Fetch all evaluations with scores
   const { data: evals } = await db
     .from('evaluations')
     .select('id, person_id, created_at')
     .in('person_id', personIds)
     .order('created_at', { ascending: false });
 
-  // Fetch all scores
   const evalIds = (evals || []).map(e => e.id);
-  let scoresMap = {};
+  scoresMap = {};
   if (evalIds.length > 0) {
     const { data: scores } = await db
       .from('evaluation_scores')
       .select('evaluation_id, score')
       .in('evaluation_id', evalIds);
-
-    // Group by evaluation_id
     (scores || []).forEach(s => {
       if (!scoresMap[s.evaluation_id]) scoresMap[s.evaluation_id] = [];
       scoresMap[s.evaluation_id].push(s.score);
     });
   }
 
-  // For each person, find their latest eval
-  const latestEvalByPerson = {};
+  latestEvalByPerson = {};
   (evals || []).forEach(e => {
-    if (!latestEvalByPerson[e.person_id]) {
-      latestEvalByPerson[e.person_id] = e;
-    }
+    if (!latestEvalByPerson[e.person_id]) latestEvalByPerson[e.person_id] = e;
   });
 
-  grid.innerHTML = people.map(person => {
-    const latestEval = latestEvalByPerson[person.id];
-    let avgScore = null;
-    if (latestEval && scoresMap[latestEval.id]) {
-      const scores = scoresMap[latestEval.id];
-      avgScore = (scores.reduce((a, b) => a + b, 0) / scores.length).toFixed(1);
+  renderGrid();
+}
+
+function getAvgScore(person) {
+  const ev = latestEvalByPerson[person.id];
+  if (!ev || !scoresMap[ev.id]) return null;
+  const s = scoresMap[ev.id];
+  return s.reduce((a, b) => a + b, 0) / s.length;
+}
+
+function renderGrid() {
+  const query = (document.getElementById('search-input')?.value || '').toLowerCase();
+  const sort  = document.getElementById('sort-select')?.value || 'name';
+  const grid  = document.getElementById('people-grid');
+
+  let filtered = query
+    ? allPeople.filter(p => p.name.toLowerCase().includes(query) || (p.role || '').toLowerCase().includes(query))
+    : [...allPeople];
+
+  filtered.sort((a, b) => {
+    if (sort === 'score-desc') return (getAvgScore(b) ?? -1) - (getAvgScore(a) ?? -1);
+    if (sort === 'score-asc')  return (getAvgScore(a) ?? 6)  - (getAvgScore(b) ?? 6);
+    if (sort === 'date-desc') {
+      const da = latestEvalByPerson[a.id]?.created_at || '';
+      const db2 = latestEvalByPerson[b.id]?.created_at || '';
+      return db2.localeCompare(da);
     }
+    return a.name.localeCompare(b.name);
+  });
 
-    const initials = getInitials(person.name);
-    const scoreHtml = avgScore
-      ? `<span class="score-badge">${avgScore} / 5</span>`
+  if (filtered.length === 0) {
+    grid.innerHTML = `
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="empty-state-icon">🔍</div>
+        <div class="empty-state-title">Aucun résultat</div>
+        <div class="empty-state-desc">Aucun membre ne correspond à votre recherche.</div>
+      </div>`;
+    return;
+  }
+
+  grid.innerHTML = filtered.map(person => {
+    const latestEval = latestEvalByPerson[person.id];
+    const avg = getAvgScore(person);
+    const avgDisplay = avg !== null ? avg.toFixed(1) : null;
+    const scoreHtml = avgDisplay
+      ? `<span class="score-badge">${avgDisplay} / 5</span>`
       : `<span class="score-badge no-score">Aucune éval.</span>`;
-
     const lastEvalDate = latestEval
       ? `Dernière éval : ${formatDateShort(latestEval.created_at)}`
       : 'Pas encore évalué';
 
     return `
-      <div class="person-card" onclick="window.location.href='person.html?id=${person.id}'">
+      <div class="person-card" tabindex="0" role="link"
+        onclick="window.location.href='person.html?id=${person.id}'"
+        onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();window.location.href='person.html?id=${person.id}'}"
+        aria-label="${person.name}, ${person.role}${avgDisplay ? ', score ' + avgDisplay + ' sur 5' : ''}">
         <div class="person-card-header">
-          <div class="avatar" style="background:${person.color}">${initials}</div>
+          <div class="avatar" style="background:${person.color}" aria-hidden="true">${getInitials(person.name)}</div>
           <div>
             <div class="person-name">${person.name}</div>
             <div class="person-role">${person.role}</div>
@@ -137,7 +185,7 @@ async function loadDashboard() {
         </div>
         <div class="person-card-footer">
           <span>${lastEvalDate}</span>
-          <span style="color:var(--accent);font-size:12px">Voir →</span>
+          <span style="color:var(--accent);font-size:12px" aria-hidden="true">Voir →</span>
         </div>
       </div>`;
   }).join('');
