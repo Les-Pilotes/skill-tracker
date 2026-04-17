@@ -13,17 +13,23 @@ import psycopg2
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 
+def _require_env(name: str) -> str:
+    val = os.environ.get(name)
+    if not val:
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return val
+
 SUPABASE_DB = {
-    'host': 'db.hqitmgdieygglffauycj.supabase.co',
-    'port': 5432,
-    'dbname': 'postgres',
-    'user': 'postgres',
-    'password': 'L4yqboblQ2SQZbWE',
+    'host': os.environ.get('SUPABASE_DB_HOST', 'db.hqitmgdieygglffauycj.supabase.co'),
+    'port': int(os.environ.get('SUPABASE_DB_PORT', '5432')),
+    'dbname': os.environ.get('SUPABASE_DB_NAME', 'postgres'),
+    'user': os.environ.get('SUPABASE_DB_USER', 'postgres'),
+    'password': _require_env('SUPABASE_DB_PASSWORD'),
     'sslmode': 'require'
 }
 
-GMAIL_CREDS_PATH = os.path.expanduser('~/.gmail-mcp/credentials.json')
-SENDER = 'assistant@les-pilotes.fr'
+GMAIL_CREDS_PATH = os.environ.get('GMAIL_CREDS_PATH', os.path.expanduser('~/.gmail-mcp/credentials.json'))
+SENDER = os.environ.get('SENDER_EMAIL', 'assistant@les-pilotes.fr')
 
 
 def get_gmail_service():
