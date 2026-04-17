@@ -1,5 +1,26 @@
 // Auth utilities — include after config.js
 
+async function signInWithGoogle() {
+  const btn = document.getElementById('google-btn');
+  const errEl = document.getElementById('error-msg');
+  if (btn) { btn.disabled = true; btn.textContent = 'Connexion en cours…'; }
+  if (errEl) errEl.classList.remove('show');
+
+  const { error } = await db.auth.signInWithOAuth({
+    provider: 'google',
+    options: {
+      // Managers arrivent sur dashboard → requireAuth redirige les stagiaires vers leur profil
+      redirectTo: window.location.origin + '/dashboard.html'
+    }
+  });
+
+  if (error) {
+    if (errEl) { errEl.textContent = 'Erreur Google : ' + error.message; errEl.classList.add('show'); }
+    if (btn) { btn.disabled = false; btn.innerHTML = btn.innerHTML.replace('Connexion en cours…', 'Se connecter avec Google'); }
+  }
+  // Si pas d'erreur, le navigateur redirige vers Google — pas de return ici
+}
+
 // Returns { user, profile } or redirects to login
 async function requireAuth(requiredRole = null) {
   const { data: { session } } = await db.auth.getSession();
