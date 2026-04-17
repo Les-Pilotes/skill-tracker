@@ -20,6 +20,14 @@ async function requireAuth(requiredRole = null) {
     return null;
   }
 
+  // Guard: stagiaire without person_id is in an inconsistent state — sign out
+  if (profile.role === 'stagiaire' && !profile.person_id) {
+    console.error('Stagiaire account has no person_id linked. Signing out.');
+    await db.auth.signOut();
+    window.location.href = 'login.html?error=no_person';
+    return null;
+  }
+
   if (requiredRole && profile.role !== requiredRole) {
     // Stagiaire trying to access manager page → redirect to their profile
     if (profile.role === 'stagiaire' && profile.person_id) {
