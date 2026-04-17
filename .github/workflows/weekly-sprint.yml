@@ -19,16 +19,14 @@ jobs:
           echo "and is executed by JARVIS on the VPS."
 
       - name: Send webhook to JARVIS
-        if: ${{ secrets.JARVIS_WEBHOOK_URL != '' }}
+        env:
+          JARVIS_WEBHOOK_URL: ${{ secrets.JARVIS_WEBHOOK_URL }}
         run: |
-          curl -s -X POST "${{ secrets.JARVIS_WEBHOOK_URL }}" \
-            -H "Content-Type: application/json" \
-            -d '{"event": "weekly-sprint", "timestamp": "'$(date -u -Iseconds)'"}'
-          echo "Webhook sent to JARVIS."
-
-      - name: Webhook not configured
-        if: ${{ secrets.JARVIS_WEBHOOK_URL == '' }}
-        run: |
-          echo "::notice::JARVIS webhook not configured yet."
-          echo "Add JARVIS_WEBHOOK_URL secret to enable automatic sprint triggers."
-          echo "For now, run the Sprint Manager manually via JARVIS on the VPS."
+          if [ -n "$JARVIS_WEBHOOK_URL" ]; then
+            curl -s -X POST "$JARVIS_WEBHOOK_URL" \
+              -H "Content-Type: application/json" \
+              -d '{"event": "weekly-sprint", "timestamp": "'$(date -u -Iseconds)'"}'
+            echo "Webhook sent to JARVIS."
+          else
+            echo "::notice::JARVIS webhook not configured. Add JARVIS_WEBHOOK_URL secret to enable."
+          fi
