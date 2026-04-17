@@ -1,0 +1,120 @@
+name: CI — Security & Validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  security-check:
+    name: Check for hardcoded secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Scan Python files for hardcoded passwords
+        run: |
+          echo "Scanning .py files for hardcoded credentials..."
+          FOUND=0
+          # Look for common patterns: password=, passwd=, secret=, key= with literal values
+          if grep -rn --include="*.py" -E "(password|passwd|secret)\s*[:=]\s*['\"][^'\"]{8,}" . \
+             | grep -v '.env' | grep -v 'environ' | grep -v '_require_env' | grep -v '#'; then
+            echo "::error::Potential hardcoded secrets found in Python files"
+            FOUND=1
+          fi
+          # Look for raw connection strings with passwords
+          if grep -rn --include="*.py" -E "postgresql://[^@]+:[^@]+@" . | grep -v '#'; then
+            echo "::error::Hardcoded database connection string found"
+            FOUND=1
+          fi
+          if [ "$FOUND" -eq 1 ]; then
+            exit 1
+          fi
+          echo "No hardcoded secrets found in Python files."
+
+  env-var-check:
+    name: Validate Edge Function env vars
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check env var names in Edge Functions
+        run: |
+          echo "Checking Edge Functions use correct env var names..."
+          FOUND=0
+          # SERVICE_ROLE_KEY without SUPABASE_ prefix is wrong
+          if grep -rn "Deno.env.get.*['\"]SERVICE_ROLE_KEY['\"]" supabase/functions/; then
+            echo "::error::Edge Function uses SERVICE_ROLE_KEY instead of SUPABASE_SERVICE_ROLE_KEY"
+            FOUND=1
+          fi
+          if [ "$FOUND" -eq 1 ]; then
+            exit 1
+          fi
+          echo "All env var names are correct."
+
+  sql-validation:
+    name: Validate SQL migrations
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check SQL file syntax basics
+        run: |
+          echo "Validating SQL migration files..."
+          ERRORS=0
+          for f in supabase/migrations/*.sql; do
+            echo "Checking $f..."
+            # Ensure files are not empty
+            if [ ! -s "$f" ]; then
+              echo "::error file=$f::Empty migration file"
+              ERRORS=1
+              continue
+            fi
+            # Check for common SQL issues: unmatched parentheses
+            OPEN=$(grep -o '(' "$f" | wc -l)
+            CLOSE=$(grep -o ')' "$f" | wc -l)
+            if [ "$OPEN" -ne "$CLOSE" ]; then
+              echo "::error file=$f::Unmatched parentheses (open=$OPEN, close=$CLOSE)"
+              ERRORS=1
+            fi
+            # Ensure migration files end with semicolon (ignoring comments and whitespace)
+            LAST_STMT=$(grep -v '^\s*--' "$f" | grep -v '^\s*$' | tail -1)
+            if ! echo "$LAST_STMT" | grep -q ';$'; then
+              echo "::error file=$f::Migration does not end with a semicolon"
+              ERRORS=1
+            fi
+          done
+          if [ "$ERRORS" -eq 1 ]; then
+            exit 1
+          fi
+          echo "All SQL migrations passed basic validation."
+
+  deploy-check:
+    name: Deployment readiness
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [security-check, env-var-check, sql-validation]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify deployment prerequisites
+        run: |
+          echo "Checking deployment prerequisites..."
+          # Verify required files exist
+          FILES=("app/index.html" "app/login.html" "app/js/config.js" "app/js/auth.js" "supabase/migrations/001_schema.sql")
+          for f in "${FILES[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "::error::Missing required file: $f"
+              exit 1
+            fi
+          done
+          # Verify .env.example documents all needed vars
+          for var in SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY RESEND_API_KEY SUPABASE_DB_PASSWORD; do
+            if ! grep -q "$var" .env.example; then
+              echo "::error::.env.example is missing documentation for $var"
+              exit 1
+            fi
+          done
+          echo "Deployment prerequisites verified."
+          echo "Ready to deploy. Manual deployment step required."
