@@ -6,6 +6,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Validate required env vars at startup
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+
+if (!SUPABASE_URL) throw new Error('Missing env var: SUPABASE_URL')
+if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('Missing env var: SUPABASE_SERVICE_ROLE_KEY')
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -18,8 +25,8 @@ serve(async (req) => {
     }
 
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SERVICE_ROLE_KEY')!
+      SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY
     )
 
     // Create auth user

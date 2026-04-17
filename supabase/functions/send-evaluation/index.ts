@@ -6,6 +6,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Validate required env vars at startup
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')
+const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
+const RESEND_API_KEY = Deno.env.get('RESEND_API_KEY')
+
+if (!SUPABASE_URL) throw new Error('Missing env var: SUPABASE_URL')
+if (!SUPABASE_SERVICE_ROLE_KEY) throw new Error('Missing env var: SUPABASE_SERVICE_ROLE_KEY')
+if (!RESEND_API_KEY) throw new Error('Missing env var: RESEND_API_KEY')
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -16,8 +25,8 @@ serve(async (req) => {
     if (!evaluation_id) throw new Error('evaluation_id requis')
 
     const supabase = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SERVICE_ROLE_KEY')!
+      SUPABASE_URL,
+      SUPABASE_SERVICE_ROLE_KEY
     )
 
     // Fetch evaluation with person and scores
@@ -106,7 +115,7 @@ serve(async (req) => {
 </html>`
 
     // Send via Resend
-    const resendKey = Deno.env.get('RESEND_API_KEY')!
+    const resendKey = RESEND_API_KEY
     const resendRes = await fetch('https://api.resend.com/emails', {
       method: 'POST',
       headers: {
