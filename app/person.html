@@ -2,12 +2,14 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Profil — Pilotes Academy</title>
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
+<a class="skip-link" href="#main">Aller au contenu</a>
 
-<nav class="navbar">
+<nav class="navbar" aria-label="Navigation principale">
   <div class="navbar-inner">
     <div class="navbar-brand">
       <img src="logo.png" alt="Les Pilotes" style="width:28px;height:28px;border-radius:50%;object-fit:cover;">
@@ -24,21 +26,22 @@
   </div>
 </nav>
 
-<div class="page-wrap">
+<main id="main" class="page-wrap">
   <div id="main-content">
     <div class="loading"><div class="spinner"></div> Chargement...</div>
   </div>
-</div>
+</main>
 
 <!-- Modal: Gérer les compétences -->
-<div class="modal-overlay" id="skills-modal">
+<div class="modal-overlay" id="skills-modal" role="dialog" aria-modal="true" aria-labelledby="skills-modal-title">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">Gérer les compétences</div>
-      <button class="modal-close" onclick="closeModal('skills-modal')">×</button>
+      <div class="modal-title" id="skills-modal-title">Gérer les compétences</div>
+      <button class="modal-close" onclick="closeModal('skills-modal')" aria-label="Fermer">×</button>
     </div>
     <div class="skills-list" id="skills-list-modal"></div>
     <div class="add-skill-row">
+      <label for="new-skill-input" class="sr-only">Nouvelle compétence</label>
       <input type="text" id="new-skill-input" placeholder="Nouvelle compétence..." maxlength="50">
       <button class="btn btn-primary btn-sm" onclick="addSkill()">Ajouter</button>
     </div>
@@ -49,11 +52,11 @@
 </div>
 
 <!-- Modal: Confirmer envoi email -->
-<div class="modal-overlay" id="email-modal">
+<div class="modal-overlay" id="email-modal" role="dialog" aria-modal="true" aria-labelledby="email-modal-title">
   <div class="modal">
     <div class="modal-header">
-      <div class="modal-title">Envoyer le bilan</div>
-      <button class="modal-close" onclick="closeModal('email-modal')">×</button>
+      <div class="modal-title" id="email-modal-title">Envoyer le bilan</div>
+      <button class="modal-close" onclick="closeModal('email-modal')" aria-label="Fermer">×</button>
     </div>
     <p style="font-size:14px;color:var(--text-muted);margin-bottom:16px" id="email-modal-body"></p>
 
@@ -72,6 +75,7 @@
     </div>
   </div>
 </div>
+<div id="toast-container" class="toast-container" aria-live="polite" aria-atomic="true"></div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
@@ -278,6 +282,8 @@ function renderRadar(current, prev, color) {
   });
 
   const ctx = document.getElementById('radar-chart');
+  ctx.setAttribute('role', 'img');
+  ctx.setAttribute('aria-label', `Radar des compétences de ${currentPerson?.name || ''} — ${labels.map((l, i) => l + ' : ' + (currentScores[i] || 0)).join(', ')}`);
   if (radarChart) radarChart.destroy();
   radarChart = new Chart(ctx, {
     type: 'radar',
@@ -331,6 +337,8 @@ function renderLineChart(color) {
   }));
 
   const ctx = document.getElementById('line-chart');
+  ctx.setAttribute('role', 'img');
+  ctx.setAttribute('aria-label', `Évolution des compétences dans le temps — ${skillNames.join(', ')}`);
   if (lineChart) lineChart.destroy();
   lineChart = new Chart(ctx, {
     type: 'line',
@@ -519,8 +527,25 @@ document.getElementById('cc-input')?.addEventListener('keypress', e => {
   if (e.key === 'Enter') addCc();
 });
 
-function openModal(id) { document.getElementById(id).classList.add('show'); }
-function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+function openModal(id) {
+  const el = document.getElementById(id);
+  el.classList.add('show');
+  trapFocus(el);
+}
+function closeModal(id) {
+  const el = document.getElementById(id);
+  el.classList.remove('show');
+  releaseFocus(el);
+}
+
+// Close modals on Escape key
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    ['skills-modal', 'email-modal'].forEach(id => {
+      if (document.getElementById(id)?.classList.contains('show')) closeModal(id);
+    });
+  }
+});
 
 document.getElementById('new-skill-input')?.addEventListener('keypress', e => {
   if (e.key === 'Enter') addSkill();

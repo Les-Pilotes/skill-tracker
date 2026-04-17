@@ -7,37 +7,53 @@
   <link rel="stylesheet" href="css/main.css">
 </head>
 <body>
+<a class="skip-link" href="#main">Aller au contenu</a>
 <div class="login-page">
-  <div class="login-card">
-    <div class="login-logo">
-      <img src="logo.png" alt="Les Pilotes" style="width:48px;height:48px;border-radius:50%;object-fit:cover;">
+  <main id="main" class="login-card">
+    <div class="login-logo" aria-hidden="true">
+      <img src="logo.png" alt="" style="width:48px;height:48px;border-radius:50%;object-fit:cover;">
       <span class="login-logo-text">Pilotes Academy</span>
     </div>
-    <div class="login-title">Connexion</div>
-    <div class="login-sub">Skill Tracker — Espace interne</div>
+    <h1 class="login-title">Connexion</h1>
+    <p class="login-sub">Skill Tracker — Espace interne</p>
 
-    <div id="error-msg" class="error-msg"></div>
+    <div id="error-msg" class="error-msg" role="alert" aria-live="polite"></div>
 
-    <form id="login-form">
+    <form id="login-form" novalidate>
       <div class="form-group">
         <label class="form-label" for="email">Adresse email</label>
-        <input class="form-input" type="email" id="email" placeholder="prenom@les-pilotes.fr" required autofocus>
+        <input class="form-input" type="email" id="email" placeholder="prenom@les-pilotes.fr"
+          autocomplete="email" required autofocus aria-required="true">
       </div>
       <div class="form-group">
         <label class="form-label" for="password">Mot de passe</label>
-        <input class="form-input" type="password" id="password" placeholder="••••••••" required>
+        <div class="input-wrapper">
+          <input class="form-input" type="password" id="password" placeholder="••••••••"
+            autocomplete="current-password" required aria-required="true">
+          <button type="button" class="input-toggle" id="pw-toggle" aria-label="Afficher le mot de passe" aria-pressed="false">👁</button>
+        </div>
       </div>
       <button class="btn btn-primary btn-lg" type="submit" id="submit-btn" style="width:100%;justify-content:center;margin-top:8px">
         Se connecter
       </button>
     </form>
-  </div>
+  </main>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="js/config.js"></script>
 <script src="js/auth.js"></script>
 <script>
+  // Password visibility toggle
+  document.getElementById('pw-toggle').addEventListener('click', function() {
+    const pw = document.getElementById('password');
+    const show = pw.type === 'password';
+    pw.type = show ? 'text' : 'password';
+    this.textContent = show ? '🙈' : '👁';
+    this.setAttribute('aria-pressed', show);
+    this.setAttribute('aria-label', show ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+  });
+
   redirectIfAuth();
 
   document.getElementById('login-form').addEventListener('submit', async (e) => {
