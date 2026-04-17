@@ -1,0 +1,34 @@
+name: Weekly Sprint Manager
+
+on:
+  schedule:
+    - cron: '0 9 * * MON'  # Every Monday at 9:00 UTC
+  workflow_dispatch:         # Manual trigger
+
+jobs:
+  trigger-sprint-manager:
+    name: Trigger Sprint Manager Agent
+    runs-on: ubuntu-latest
+    steps:
+      - name: Notify Sprint Manager
+        run: |
+          echo "Weekly Sprint Manager trigger — $(date -u '+%Y-%m-%d %H:%M UTC')"
+          echo ""
+          echo "This workflow notifies JARVIS to run the Sprint Manager Agent."
+          echo "The actual sprint planning logic lives in agents/sprint-manager.md"
+          echo "and is executed by JARVIS on the VPS."
+
+      - name: Send webhook to JARVIS
+        if: ${{ secrets.JARVIS_WEBHOOK_URL != '' }}
+        run: |
+          curl -s -X POST "${{ secrets.JARVIS_WEBHOOK_URL }}" \
+            -H "Content-Type: application/json" \
+            -d '{"event": "weekly-sprint", "timestamp": "'$(date -u -Iseconds)'"}'
+          echo "Webhook sent to JARVIS."
+
+      - name: Webhook not configured
+        if: ${{ secrets.JARVIS_WEBHOOK_URL == '' }}
+        run: |
+          echo "::notice::JARVIS webhook not configured yet."
+          echo "Add JARVIS_WEBHOOK_URL secret to enable automatic sprint triggers."
+          echo "For now, run the Sprint Manager manually via JARVIS on the VPS."
