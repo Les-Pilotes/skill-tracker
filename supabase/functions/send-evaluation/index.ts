@@ -21,8 +21,11 @@ serve(async (req) => {
   }
 
   try {
-    const { evaluation_id } = await req.json()
+    const { evaluation_id, cc, radar_image } = await req.json()
     if (!evaluation_id) throw new Error('evaluation_id requis')
+
+    // Validate cc is array of strings if provided
+    const ccList: string[] = Array.isArray(cc) ? cc.filter((e: any) => typeof e === 'string' && e.includes('@')) : []
 
     const supabase = createClient(
       SUPABASE_URL,
@@ -99,6 +102,11 @@ serve(async (req) => {
     </div>
   </div>
 
+  ${radar_image ? `
+  <div style="padding:24px;text-align:center;border-bottom:1px solid #E8E7E3">
+    <img src="${radar_image}" alt="Radar des compétences" style="max-width:100%;height:auto"/>
+  </div>` : ''}
+
   <div style="padding:24px">
     <table style="width:100%;border-collapse:collapse">
       <thead>
@@ -136,6 +144,7 @@ serve(async (req) => {
       body: JSON.stringify({
         from: 'Pilotes Academy <noreply@les-pilotes.fr>',
         to: [person.email],
+        ...(ccList.length > 0 ? { cc: ccList } : {}),
         subject: `Bilan de compétences — ${person.name} — ${evalDate}`,
         html
       })
