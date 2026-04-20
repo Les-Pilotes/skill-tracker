@@ -623,13 +623,11 @@ async function sendEvalEmail(evalId) {
   }
 
   try {
-    const resp = await fetch('/skill-tracker/send-bilan', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ evaluation_id: evalId, cc: ccList, radar_image: radarImage })
+    const { data, error } = await db.functions.invoke('send-evaluation', {
+      body: { evaluation_id: evalId, cc: ccList, radar_image: radarImage }
     });
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.detail || 'Erreur serveur');
+    if (error) throw new Error(error.message || 'Erreur serveur');
+    if (data?.error) throw new Error(data.error);
     toast('Bilan envoyé par email ✓', 'success');
     closeModal('email-modal');
   } catch (e) {
