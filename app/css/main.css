@@ -195,6 +195,16 @@ input, textarea, select { font-family: inherit; font-size: 14px; }
 }
 .btn-danger:hover { background: var(--danger-light); border-color: var(--danger); }
 
+.btn-google {
+  background: var(--white);
+  color: #3c4043;
+  border-color: #dadce0;
+  font-weight: 500;
+  gap: 10px;
+}
+.btn-google:hover { background: #f8f9fa; border-color: #c6c8ca; }
+.btn-google:focus-visible { outline: 2px solid #4285F4; outline-offset: 2px; }
+
 .btn-sm { padding: 5px 10px; font-size: 12px; }
 .btn-lg { padding: 10px 20px; font-size: 14px; }
 

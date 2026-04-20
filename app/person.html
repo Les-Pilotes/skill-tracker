@@ -89,6 +89,8 @@ let allSkills = [];
 let allEvals = [];
 let radarChart = null;
 let lineChart = null;
+let editingEvalId = null;
+let editingScores = {};
 
 const params = new URLSearchParams(location.search);
 currentPersonId = params.get('id');
@@ -361,10 +363,13 @@ function renderEvalList() {
   if (!list) return;
 
   const reversed = [...allEvals].reverse();
+  const isManager = currentProfile.role === 'manager';
 
   list.innerHTML = reversed.map(ev => {
     const scores = ev.evaluation_scores || [];
     const avg = scores.length ? (scores.reduce((a,b)=>a+b.score,0)/scores.length).toFixed(1) : '—';
+
+    if (editingEvalId === ev.id) return renderEvalEditForm(ev, scores);
 
     const scoresHtml = scores.map(s => `
       <div class="score-row">
@@ -383,15 +388,127 @@ function renderEvalList() {
       <div class="eval-item">
         <div class="eval-item-header">
           <span class="eval-date">${formatDate(ev.created_at)}</span>
-          <div style="display:flex;align-items:center;gap:12px">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
             <span class="eval-avg">Moyenne : <strong>${avg}</strong> / 5</span>
-            ${currentProfile.role === 'manager' ? `<button class="btn btn-secondary btn-sm" onclick="openEmailModal('${ev.id}')">Envoyer</button>` : ''}
+            ${isManager ? `
+              <button class="btn btn-secondary btn-sm" onclick="enterEditMode('${ev.id}')">Modifier</button>
+              <button class="btn btn-secondary btn-sm" onclick="openEmailModal('${ev.id}')">Envoyer</button>
+            ` : ''}
           </div>
         </div>
         <div class="eval-scores-grid">${scoresHtml}</div>
         ${ev.general_comment ? `<div class="eval-comment">💬 ${ev.general_comment}</div>` : ''}
       </div>`;
   }).join('');
+}
+
+function renderEvalEditForm(ev, scores) {
+  const sorted = [...scores].sort((a, b) => (a.skills?.name || '').localeCompare(b.skills?.name || ''));
+  const escape = (s) => (s || '').replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
+
+  const rows = sorted.map(s => {
+    const data = editingScores[s.skill_id] || { score: s.score, comment: s.comment || '' };
+    return `
+      <div class="skill-row" style="border-bottom-color:rgba(186,117,23,0.2)">
+        <div class="skill-name">${s.skills?.name || '—'}</div>
+        <div class="score-input-group" role="group" aria-label="Note pour ${escape(s.skills?.name || '')}">
+          ${[1,2,3,4,5].map(n => `
+            <button class="score-btn ${data.score === n ? 'selected' : ''}"
+              data-edit-skill="${s.skill_id}" data-score="${n}"
+              onclick="setEditScore('${s.skill_id}', ${n})"
+              aria-pressed="${data.score === n}" aria-label="${n} sur 5">${n}</button>
+          `).join('')}
+        </div>
+        <div class="skill-comment">
+          <input type="text" placeholder="Commentaire (optionnel)" maxlength="200"
+            value="${escape(data.comment)}"
+            oninput="setEditComment('${s.skill_id}', this.value)"
+            aria-label="Commentaire pour ${escape(s.skills?.name || '')}">
+        </div>
+      </div>`;
+  }).join('');
+
+  return `
+    <div class="eval-item" style="border-color:var(--accent);background:var(--accent-light)">
+      <div class="eval-item-header">
+        <span class="eval-date">✏️ Modifier l'évaluation du ${formatDate(ev.created_at)}</span>
+        <div style="display:flex;align-items:center;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="exitEditMode()">Annuler</button>
+          <button class="btn btn-primary btn-sm" id="save-edit-${ev.id}" onclick="saveEvalEdit('${ev.id}')">Enregistrer</button>
+        </div>
+      </div>
+      <div style="margin-top:12px;background:var(--white);border-radius:var(--radius-sm);padding:4px 16px">${rows}</div>
+      <div class="form-group" style="margin-top:16px;margin-bottom:0">
+        <label class="form-label" for="edit-gc-${ev.id}">Commentaire général</label>
+        <textarea class="form-input" id="edit-gc-${ev.id}" rows="3" maxlength="1000"
+          placeholder="Bilan global...">${(ev.general_comment || '').replace(/</g, '&lt;')}</textarea>
+      </div>
+    </div>`;
+}
+
+function enterEditMode(evalId) {
+  const ev = allEvals.find(e => e.id === evalId);
+  if (!ev) return;
+  editingEvalId = evalId;
+  editingScores = {};
+  (ev.evaluation_scores || []).forEach(s => {
+    editingScores[s.skill_id] = { id: s.id, score: s.score, comment: s.comment || '' };
+  });
+  renderEvalList();
+  document.getElementById(`save-edit-${evalId}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function exitEditMode() {
+  editingEvalId = null;
+  editingScores = {};
+  renderEvalList();
+}
+
+function setEditScore(skillId, score) {
+  if (editingScores[skillId]) editingScores[skillId].score = score;
+  document.querySelectorAll(`[data-edit-skill="${skillId}"]`).forEach(btn => {
+    const sel = parseInt(btn.dataset.score) === score;
+    btn.classList.toggle('selected', sel);
+    btn.setAttribute('aria-pressed', sel);
+  });
+}
+
+function setEditComment(skillId, comment) {
+  if (editingScores[skillId]) editingScores[skillId].comment = comment;
+}
+
+async function saveEvalEdit(evalId) {
+  const btn = document.getElementById(`save-edit-${evalId}`);
+  btn.disabled = true;
+  btn.textContent = 'Enregistrement...';
+
+  const generalComment = document.getElementById(`edit-gc-${evalId}`)?.value.trim() || null;
+  const { error: eErr } = await db.from('evaluations')
+    .update({ general_comment: generalComment })
+    .eq('id', evalId);
+  if (eErr) {
+    toast('Erreur : ' + eErr.message, 'error');
+    btn.disabled = false; btn.textContent = 'Enregistrer';
+    return;
+  }
+
+  const updates = Object.values(editingScores).map(data =>
+    db.from('evaluation_scores')
+      .update({ score: data.score, comment: data.comment || null })
+      .eq('id', data.id)
+  );
+  const results = await Promise.all(updates);
+  const errs = results.filter(r => r.error);
+  if (errs.length) {
+    toast(`Erreur sur ${errs.length} note(s) : ${errs[0].error.message}`, 'error');
+    btn.disabled = false; btn.textContent = 'Enregistrer';
+    return;
+  }
+
+  toast('Évaluation modifiée ✓', 'success');
+  editingEvalId = null;
+  editingScores = {};
+  await loadProfile();
 }
 
 function switchTab(tab) {
@@ -544,6 +661,7 @@ document.addEventListener('keydown', (e) => {
     ['skills-modal', 'email-modal'].forEach(id => {
       if (document.getElementById(id)?.classList.contains('show')) closeModal(id);
     });
+    if (editingEvalId) exitEditMode();
   }
 });
 
